@@ -128,6 +128,10 @@ class Vgg16BN():
     def create(self, size, include_top):
         """
             Creates the Vgg16BN architecture and loads the pretrained weights
+            allow create models in 3 types and load vgg weights accordingly
+               - case 1 (default) : size (224,224), include_top - Conv layers + Dense layers + both loading complete vgg pretrained weights
+               - case 2           : size not (224,224), include_top - Conv layers loading vgg weights + Dense layers no loading weights (because vgg pretrained in (224,224) resolution)
+               - case 3 :         : not inlude_top, all sizes - Conv layers loading vgg weights, no Dense layers
             
             Args:
                 size (tuple(int)): (height, weight) of input image size. default: (224, 224)
@@ -136,8 +140,8 @@ class Vgg16BN():
             TODO: to solve differnt input dimension problem
             Ref: https://yohanes.gultom.me/keras-vgg16-with-different-input-shape/
         """
-        if size != (224,224):
-            include_top = False
+        #if size != (224,224):
+        #    include_top = False
         
         model = self.model = Sequential()
         model.add(Lambda(vgg_preprocess, input_shape=(3,)+size, output_shape=(3,)+size))
@@ -150,9 +154,12 @@ class Vgg16BN():
         
         if not include_top:
             fname = 'vgg16_bn_conv.h5'
-            model.load_weights(get_file(fname, self.FILE_PATH+fname, cache_subdir='models', cache_dir='./models'))
-            #model.load_weights(get_file('vgg16_bn_conv.h5', 'http://files.fast.ai/models/vgg16_bn_conv.h5', cache_subdir='models', cache_dir='./models'))
+            model.load_weights(get_file(fname, self.FILE_PATH+fname, cache_subdir='models'))
             return
+        
+        if size != (224,224):
+            fname = 'vgg16_bn_conv.h5'
+            model.load_weights(get_file(fname, self.FILE_PATH+fname, cache_subdir='models'))
         
         model.add(Flatten())
         
@@ -160,10 +167,10 @@ class Vgg16BN():
         self.FCBlock(name='fc2')
         model.add(Dense(1000, activation='softmax'))
         
-        fname = 'vgg16_bn.h5'
-        model.load_weights(get_file(fname, self.FILE_PATH+fname, cache_subdir='models'))
-        
-        self.set_dropout(0.)
+        if size == (224,224):
+            fname = 'vgg16_bn.h5'
+            model.load_weights(get_file(fname, self.FILE_PATH+fname, cache_subdir='models'))
+            self.set_dropout(0.)
 
     
     def get_batches(self, path, gen=image.ImageDataGenerator(), shuffle=True, batch_size=8, class_mode='categorical'):

@@ -35,8 +35,27 @@ def get_classes(path):
 def get_data(path, target_size=(224, 224)):
     batches = get_batches(path, shuffle=False, batch_size=1, class_mode=None, target_size=target_size)
     return np.concatenate([batches.next() for i in range(batches.samples)])
+    
 
-
+def get_split_model(model, layer_type):
+    if layer_type == Conv2D: 
+        last_conv_idx = [idx for idx, layer in enumerate(model.layers) if type(layer)==Conv2D][-1]
+        split_layer_idx = last_conv_idx + 1
+    elif layer_type == Flatten:
+        flatten_idx = [idx for idx, layer in enumerate(model.layers) if type(layer)==Flatten][0]
+        split_layer_idx = flatten_idx
+        
+    conv_model = Sequential(model.layers[:split_layer_idx])
+    for layer in conv_model.layer: layer.trainable = False
+    conv_model.compile(Adam(), loss='categorical_crossentropy', metrics=['accuracy'])
+    
+    fc_model = Sequential(model.layers[split_layer_idx:])
+    for layer in fc_model.layer: layer.trainable = True
+    conv_model.compile(Adam(), loss='categorical_crossentropy', metrics=['accuracy'])
+    
+    return conv_model, fc_model
+    
+    
 def ceil(x):
     return int(math.ceil(x))
 
@@ -52,3 +71,4 @@ def save_array(fname, arr):
     
 def load_array(fname):
     return bcolz.open(rootdir=fname)
+

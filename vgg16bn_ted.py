@@ -210,7 +210,7 @@ class Vgg16BN():
         self.ft(batches.num_classes)
         
         classes = list(iter(batches.class_indices))
-        for c in batches,class_indices:
+        for c in batches.class_indices:
             classes[batches.class_indices[c]] = c
         self.classes = classes
         

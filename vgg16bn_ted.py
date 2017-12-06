@@ -122,8 +122,8 @@ class Vgg16BN():
                       
         for layer in self.model.layers:
             if type(layer) is Dense: 
-                layer.set_weights([wgt * scale for wgt in layer.get_weights()]) 
-
+                layer.set_weights([wgt * scale for wgt in layer.get_weights()])         
+    
     
     def create(self, size, include_top):
         """
@@ -264,4 +264,4 @@ class Vgg16BN():
                                          steps=int(math.ceil(test_batches.n/test_batches.batch_size)),
                                          verbose=verbose)
                                      
-        
+   

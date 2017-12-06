@@ -7,6 +7,8 @@ import bcolz
 
 from sklearn.preprocessing import OneHotEncoder
 
+import pandas as pd
+
 from keras.preprocessing import image
 from keras.models import Sequential
 from keras.layers import Dense, BatchNormalization, Conv2D, MaxPooling2D 
@@ -14,7 +16,14 @@ from keras.layers.core import Flatten, Dropout
 from keras.optimizers import Adam
 from keras.regularizers import l2
 from keras import backend as K
+import tensorflow as tf
+sess = tf.Session()
+K.set_session(sess)
 K.set_image_data_format('channels_first')
+
+from keras.metrics import categorical_accuracy as accuracy
+from keras.metrics import categorical_crossentropy as crossentropy
+
 
 def onehot(x):
     return np.array(OneHotEncoder().fit_transform(x.reshape(-1, 1)).todense())
@@ -37,25 +46,89 @@ def get_data(path, target_size=(224, 224)):
     return np.concatenate([batches.next() for i in range(batches.samples)])
     
 
-def get_split_model(model, layer_type):
-    if layer_type == Conv2D: 
-        last_conv_idx = [idx for idx, layer in enumerate(model.layers) if type(layer)==Conv2D][-1]
-        split_layer_idx = last_conv_idx + 1
-    elif layer_type == Flatten:
-        flatten_idx = [idx for idx, layer in enumerate(model.layers) if type(layer)==Flatten][0]
-        split_layer_idx = flatten_idx
+def get_split_models(model):
+    """
+        Gets the two models spliting convolution model and dense model at Flatten layer
+            
+        Returns:
+        conv_model: the model constructing by Vgg convolution layers ending at the last MaxPooling2D layer 
+        fc_model: the model constructing by Vgg dense layers starting at Flatten layer
+            
+    """
+    flatten_idx = [idx for idx, layer in enumerate(model.layers) if type(layer)==Flatten][0]
         
-    conv_model = Sequential(model.layers[:split_layer_idx])
-    for layer in conv_model.layer: layer.trainable = False
+    conv_model = Sequential(model.layers[:flatten_idx])
+    for layer in conv_model.layers: layer.trainable = False
     conv_model.compile(Adam(), loss='categorical_crossentropy', metrics=['accuracy'])
     
-    fc_model = Sequential(model.layers[split_layer_idx:])
-    for layer in fc_model.layer: layer.trainable = True
-    conv_model.compile(Adam(), loss='categorical_crossentropy', metrics=['accuracy'])
+    fc_model = Sequential([ 
+            Flatten(input_shape=conv_model.layers[-1].output_shape[1:]) 
+        ])
+    for layer in model.layers[flatten_idx+1:]: 
+        fc_model.add(layer)
+    for layer in fc_model.layers: layer.trainable = True
+    fc_model.compile(Adam(), loss='categorical_crossentropy', metrics=['accuracy'])
     
     return conv_model, fc_model
     
-    
+
+def set_trainable(model, layer_type=Flatten):
+    """
+        Set specific type of layer in the model to be trainable
+        
+        Args:
+            model: vgg model
+            layer_type: Dense, Conv2D, ...etc
+    """
+    if layer_type == Conv2D: 
+        last_conv_idx = [idx for idx, layer in enumerate(model.layers) if type(layer)==Conv2D][-1]
+        for layer in model.layers[:last_conv_idx+1]: layer.trainable = True
+            
+    elif layer_type == Flatten:
+        flatten_idx = [idx for idx, layer in enumerate(model.layers) if type(layer)==Flatten][0]
+        for layer in model.layers[flatten_idx:]: layer.trainable = True
+            
+    elif layer_type == Dense:
+        for layer in model.layers: 
+            if type(layer) == Dense: layer.trainable = True
+
+                
+def eval_accuracy(labels, preds):
+    """
+        https://blog.keras.io/keras-as-a-simplified-interface-to-tensorflow-tutorial.html
+    """
+   
+    acc_value = accuracy(labels, preds)
+    with sess.as_default():
+        eval_result = acc_value.eval()
+    return eval_result.mean()
+
+
+def eval_crossentropy(labels, preds):
+    """
+        
+        Ref: https://stackoverflow.com/questions/46687064/categorical-crossentropy-loss-no-attribute-get-shape
+    """
+   
+    entropy_value = crossentropy(K.constant(labels.astype('float32')), K.constant(preds.astype('float32')))
+    with sess.as_default():
+        eval_result = entropy_value.eval()
+    return eval_result.mean()
+
+
+def do_clip(preds, max_pred): 
+    """
+       Finds a good clipping amount using the validation set, prior to submitting.
+       
+       Args:
+           preds: prediction array for all prediction classes
+           max_pred: maximum prediction clip edge ex: 0.90, 0.93, 0.95, 0.98...etc
+       Returns:
+           the prediction array after clipping by maximum and minimum clipping edge
+    """
+    return np.clip(preds, (1-max_pred)/9, max_pred)
+
+        
 def ceil(x):
     return int(math.ceil(x))
 
@@ -71,4 +144,5 @@ def save_array(fname, arr):
     
 def load_array(fname):
     return bcolz.open(rootdir=fname)
+
 

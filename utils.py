@@ -5,7 +5,7 @@ from numpy.random import permutation, random
 from shutil import copyfile
 import bcolz
 
-from sklearn.preprocessing import OneHotEncoder
+from sklearn.preprocessing import OneHotEncoder, to_categorical
 
 import pandas as pd
 
@@ -26,7 +26,8 @@ from keras.metrics import categorical_crossentropy as crossentropy
 
 
 def onehot(x):
-    return np.array(OneHotEncoder().fit_transform(x.reshape(-1, 1)).todense())
+    return to_categorical(x)
+    #return np.array(OneHotEncoder().fit_transform(x.reshape(-1, 1)).todense())
 
 
 def get_batches(path, gen=image.ImageDataGenerator(), shuffle=True ,batch_size=8, 

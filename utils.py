@@ -153,6 +153,7 @@ class MixIterator(object):
         self.iters = iters
         self.n = sum([itr.n for itr in self.iters])
         self.batch_size = sum([itr.batch_size for itr in self.iters])
+        self.steps_per_epoch = sum([ceil(itr.n/itr.batch_size) for itr in self.iters])
     
     def reset(self):
         for itr in self.iters: itr.reset()
@@ -165,4 +166,25 @@ class MixIterator(object):
         n0 = np.concatenate([n[0] for n in nexts])
         n1 = np.concatenate([n[1] for n in nexts])
         return (n0, n1)
+
+    
+class PseudoLabelGenerator(object):
+    
+    def __init__(self, iterator, model):
+        self.iter = iterator
+        self.n = self.iter.n
+        self.batch_size = self.iter.batch_size
+        self.steps_per_epoch = ceil(self.iter.n/self.iter.batch_size)
+        self.model = model
+    
+    def reset(self):
+        self.iter.reset()
+    
+    def __iter__(self):
+        return self
+    
+    def __next__(self, *args, **kwargs):
+        nexts = next(self.iter)
+        results = self.model.predict(nexts[0], batch_size=self.batch_size)
+        return (nexts[0], results)
 

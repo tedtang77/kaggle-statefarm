@@ -5,10 +5,11 @@ from numpy.random import permutation, random
 from shutil import copyfile
 import bcolz
 
-from sklearn.preprocessing import OneHotEncoder, to_categorical
+from sklearn.preprocessing import OneHotEncoder
 
 import pandas as pd
 
+from keras.utils import get_file, to_categorical
 from keras.preprocessing import image
 from keras.models import Sequential
 from keras.layers import Dense, BatchNormalization, Conv2D, MaxPooling2D 
@@ -44,7 +45,7 @@ def get_classes(path):
 
 def get_data(path, target_size=(224, 224)):
     batches = get_batches(path, shuffle=False, batch_size=1, class_mode=None, target_size=target_size)
-    return np.concatenate([batches.next() for i in range(batches.samples)])
+    return np.concatenate([batches.next() for i in range(batches.n)])
     
 
 def get_split_models(model):
@@ -65,8 +66,7 @@ def get_split_models(model):
     fc_model = Sequential([ 
             Flatten(input_shape=conv_model.layers[-1].output_shape[1:]) 
         ])
-    for layer in model.layers[flatten_idx+1:]: 
-        fc_model.add(layer)
+    for layer in model.layers[flatten_idx+1:]: fc_model.add(layer)
     for layer in fc_model.layers: layer.trainable = True
     fc_model.compile(Adam(), loss='categorical_crossentropy', metrics=['accuracy'])
     
@@ -146,4 +146,23 @@ def save_array(fname, arr):
 def load_array(fname):
     return bcolz.open(rootdir=fname)
 
+
+class MixIterator(object):
+    
+    def __init__(self, iters):
+        self.iters = iters
+        self.n = sum([itr.n for itr in self.iters])
+        self.batch_size = sum([itr.batch_size for itr in self.iters])
+    
+    def reset(self):
+        for itr in self.iters: itr.reset()
+    
+    def __iter__(self):
+        return self
+    
+    def __next__(self, *args, **kwargs):
+        nexts = [next(itr) for itr in self.iters]
+        n0 = np.concatenate([n[0] for n in nexts])
+        n1 = np.concatenate([n[1] for n in nexts])
+        return (n0, n1)
 

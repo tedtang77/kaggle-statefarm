@@ -153,7 +153,7 @@ class MixIterator(object):
         self.iters = iters
         self.n = sum([itr.n for itr in self.iters])
         self.batch_size = sum([itr.batch_size for itr in self.iters])
-        self.steps_per_epoch = sum([ceil(itr.n/itr.batch_size) for itr in self.iters])
+        self.steps_per_epoch = max([ceil(itr.n/itr.batch_size) for itr in self.iters])
     
     def reset(self):
         for itr in self.iters: itr.reset()

@@ -1,11 +1,21 @@
 from glob import glob
 import os, sys, json, math
 import numpy as np
-from numpy.random import permutation, random
+from numpy.random import permutation, random, choice
 from shutil import copyfile
 import bcolz
 
+from PIL import Image
+
 from sklearn.preprocessing import OneHotEncoder
+from scipy.ndimage import *
+from scipy.misc import *
+from sklearn.metrics import confusion_matrix
+
+import itertools
+from itertools import chain
+
+from matplotlib import pyplot as plt
 
 import pandas as pd
 
@@ -73,7 +83,7 @@ def get_split_models(model):
     return conv_model, fc_model
     
 
-def set_trainable(model, layer_type=Flatten):
+def set_trainable(model, layer_type='Flatten'):
     """
         Set specific type of layer in the model to be trainable
         
@@ -81,17 +91,84 @@ def set_trainable(model, layer_type=Flatten):
             model: vgg model
             layer_type: Dense, Conv2D, ...etc
     """
-    if layer_type == Conv2D: 
+    if layer_type == 'Conv2D': 
         last_conv_idx = [idx for idx, layer in enumerate(model.layers) if type(layer)==Conv2D][-1]
         for layer in model.layers[:last_conv_idx+1]: layer.trainable = True
             
-    elif layer_type == Flatten:
+    elif layer_type == 'Flatten':
         flatten_idx = [idx for idx, layer in enumerate(model.layers) if type(layer)==Flatten][0]
         for layer in model.layers[flatten_idx:]: layer.trainable = True
             
-    elif layer_type == Dense:
+    elif layer_type == 'Dense':
         for layer in model.layers: 
             if type(layer) == Dense: layer.trainable = True
+    model.compile(Adam(), loss='categorical_crossentropy', metrics=['accuracy'])
+    
+
+def plot(img, title=None):
+    if type(img) is np.ndarray:
+        img = np.array(img).astype(np.uint8)
+        # make sure ims is channel-last
+        if img.shape[-1] != 3:
+            img = img.transpose((1,2,0))
+    f = plt.figure()
+    sp = plt.subplot(111)
+    sp.axis('off')
+    sp.set_title(title, fontsize=16)
+    plt.imshow(img)
+                
+
+def plots(ims, figsize=(12,6), rows=1, interp=False, titles=None):
+    if type(ims[0]) is np.ndarray:
+        ims = np.array(ims).astype(np.uint8)
+        # make sure ims is channel-last
+        if ims.shape[-1] != 3:
+            ims = ims.transpose((0,2,3,1))
+    f = plt.figure(figsize=figsize)
+    cols = int(math.ceil(len(ims)/rows))
+    for i in range(len(ims)):
+        sp = f.add_subplot(rows, cols, i+1)
+        sp.axis('off')
+        if titles is not None:
+            sp.set_title(titles[i], fontsize=16)
+        plt.imshow(ims[i], interpolation=None if interp else 'none')
+
+
+def augment_view(param_name, choices, path, batch_size=64):
+    batches = get_batches(path, shuffle=False, batch_size=batch_size)
+    
+    idx = int(np.random.choice(len(batches.filenames), 1)[0])
+    # Create a 'batch' of a single image
+    img_orig = imread(path+batches.filenames[idx])
+    img_orig_batch = np.expand_dims(img_orig, axis=0)
+    
+    # original data
+    plot(img_orig, title='original image')
+
+    for c in choices:
+        if param_name is 'rotation_range':
+            gen = image.ImageDataGenerator(rotation_range=c, horizontal_flip=True, data_format='channels_last')
+        elif param_name is 'width_shift_range':
+            gen = image.ImageDataGenerator(width_shift_range=c, horizontal_flip=True, data_format='channels_last')
+        elif param_name is 'height_shift_range':
+            gen = image.ImageDataGenerator(height_shift_range=c, horizontal_flip=True, data_format='channels_last')
+        elif param_name is 'shear_range':
+            gen = image.ImageDataGenerator(shear_range=c, horizontal_flip=True, data_format='channels_last')
+        elif param_name is 'zoom_range':
+            gen = image.ImageDataGenerator(zoom_range=c, horizontal_flip=True, data_format='channels_last')
+        elif param_name is 'channel_shift_range':
+            gen = image.ImageDataGenerator(channel_shift_range=c, horizontal_flip=True, data_format='channels_last')
+        else:
+            return
+
+        # Request the generator to create batches from this image
+        aug_iter = gen.flow(img_orig_batch)
+
+        # Get eight examples of these augmented images
+        aug_imgs = [np.squeeze(next(aug_iter), axis=0).astype(np.uint8) for i in range(8)]
+
+        # Augmented data
+        plots(aug_imgs, (20,8), rows=1, titles=[param_name+' \n= '+str(c)+'\n augmented' for i in range(len(aug_imgs))])
 
                 
 def eval_accuracy(labels, preds):
@@ -147,12 +224,49 @@ def load_array(fname):
     return bcolz.open(rootdir=fname)
 
 
+def plot_confusion_matrix(cm, classes, normalize=False, title="Confusion Matrix", cmap=plt.cm.Blues):
+    """
+        This function prints and plots the confusion matrix.
+        Normalization can be applied by setting 'normalize=True'
+        (This function is copied from scikit docs: https://github.com/scikit-learn/scikit-learn/blob/master/examples/model_selection/plot_confusion_matrix.py)
+        
+    """
+
+    if normalize:
+        cm = cm.astype('float') / cm.sum(axis=1)[:, np.newaxis]
+        print("Normalized confusion matrix")
+    else:
+        print('Confusion matrix, without normalization')
+
+    print(cm)
+
+    plt.figure()
+    plt.imshow(cm, interpolation='nearest', cmap=cmap)
+    plt.title(title)
+    plt.colorbar()
+    tick_marks = np.arange(len(classes))
+    plt.xticks(tick_marks, classes, rotation=45)
+    plt.yticks(tick_marks, classes)
+
+    #fmt = '.2f' if normalize else 'd'
+    fmt = '.2f'
+    thresh = cm.max() / 2.
+    for i, j in itertools.product(range(cm.shape[0]), range(cm.shape[1])):
+        plt.text(j, i, format(cm[i, j], fmt),
+                 horizontalalignment="center",
+                 color="white" if cm[i, j] > thresh else "black")
+
+    plt.tight_layout()
+    plt.ylabel('True label')
+    plt.xlabel('Predicted label')
+
+    
 class MixIterator(object):
     
     def __init__(self, iters):
         self.iters = iters
-        self.n = sum([itr.n for itr in self.iters])
-        self.batch_size = sum([itr.batch_size for itr in self.iters])
+        self.n = int(np.sum([itr.n for itr in self.iters]))
+        self.batch_size = int(np.sum([itr.batch_size for itr in self.iters]))
         self.steps_per_epoch = max([ceil(itr.n/itr.batch_size) for itr in self.iters])
     
     def reset(self):
@@ -176,6 +290,8 @@ class PseudoLabelGenerator(object):
         self.batch_size = self.iter.batch_size
         self.steps_per_epoch = ceil(self.iter.n/self.iter.batch_size)
         self.model = model
+        self.class_indices = self.iter.class_indices
+        #self.classes = np.argmax(self.model.predict_generator(self.iter,steps=self.steps_per_epoch), axis=1)
     
     def reset(self):
         self.iter.reset()

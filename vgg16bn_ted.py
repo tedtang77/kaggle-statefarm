@@ -8,6 +8,7 @@ from keras.models import Sequential
 from keras.layers import Dense, Conv2D, MaxPooling2D, ZeroPadding2D, Lambda, BatchNormalization
 from keras.layers.core import Flatten, Dropout
 from keras.optimizers import Adam, SGD
+from keras.regularizers import l1,l2
 
 from keras import backend as K
 import tensorflow as tf

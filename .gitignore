@@ -1,2 +1,4 @@
 models
 reference
+.ipynb_checkpoints
+__pycache__

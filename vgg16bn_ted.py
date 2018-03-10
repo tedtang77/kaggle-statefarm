@@ -14,11 +14,16 @@ from keras import backend as K
 import tensorflow as tf
 sess = tf.Session()
 K.set_session(sess)
-K.set_image_data_format('channels_first')
+# K.set_image_data_format('channels_first')
+K.set_image_data_format('channels_last')
 
 # vgg_mean (in RGB order) 
-vgg_mean = np.array([123.68, 116.779, 103.939], dtype=np.float32).reshape((3, 1, 1))
+vgg_mean = np.array([123.68, 116.779, 103.939], dtype=np.float32).reshape((1, 1, 3))
 vgg_dropout = 0.5
+
+PATH = 'https://github.com/fchollet/deep-learning-models/releases/download/v0.1/'
+TF_WEIGHTS = 'vgg16_weights_tf_dim_ordering_tf_kernels.h5'
+TF_WEIGHTS_NO_TOP = 'vgg16_weights_tf_dim_ordering_tf_kernels_notop.h5'
 
 def vgg_preprocess(x):
     """
@@ -32,7 +37,7 @@ def vgg_preprocess(x):
             Image array (height x width x transposed_channels)
     """
     x = x - vgg_mean
-    return x[:,::-1]  # reverse axis rgb->bgr
+    return x[:,:,:,::-1]  # reverse axis rgb->bgr
 
 
 class Vgg16BN():
@@ -145,7 +150,7 @@ class Vgg16BN():
         #    include_top = False
         
         model = self.model = Sequential()
-        model.add(Lambda(vgg_preprocess, input_shape=(3,)+size, output_shape=(3,)+size))
+        model.add(Lambda(vgg_preprocess, input_shape=size+(3,), output_shape=size+(3,)))
         
         self.ConvBlock(2, 64)
         self.ConvBlock(2, 128)
@@ -154,13 +159,13 @@ class Vgg16BN():
         self.ConvBlock(3, 512)
         
         if not include_top:
-            fname = 'vgg16_bn_conv.h5'
-            model.load_weights(get_file(fname, self.FILE_PATH+fname, cache_subdir='models'))
+            #fname = 'vgg16_bn_conv.h5'
+            model.load_weights(get_file(fname, PATH+TF_WEIGHTS_NO_TOP, cache_subdir='models'))
             return
         
         if size != (224,224):
-            fname = 'vgg16_bn_conv.h5'
-            model.load_weights(get_file(fname, self.FILE_PATH+fname, cache_subdir='models'))
+            #fname = 'vgg16_bn_conv.h5'
+            model.load_weights(get_file(fname, PATH+TF_WEIGHTS_NO_TOP, cache_subdir='models'))
         
         model.add(Flatten())
         
@@ -169,8 +174,8 @@ class Vgg16BN():
         model.add(Dense(1000, activation='softmax'))
         
         if size == (224,224):
-            fname = 'vgg16_bn.h5'
-            model.load_weights(get_file(fname, self.FILE_PATH+fname, cache_subdir='models'))
+            #fname = 'vgg16_bn.h5'
+            model.load_weights(get_file(fname, PATH+TF_WEIGHTS, cache_subdir='models'))
             self.set_dropout(0.)
 
     

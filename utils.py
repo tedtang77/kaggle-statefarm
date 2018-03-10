@@ -21,7 +21,7 @@ import pandas as pd
 
 from keras.utils import get_file, to_categorical
 from keras.preprocessing import image
-from keras.models import Sequential
+from keras.models import Sequential, Model
 from keras.layers import Dense, BatchNormalization, Conv2D, MaxPooling2D 
 from keras.layers.core import Flatten, Dropout
 from keras.optimizers import Adam
@@ -30,7 +30,8 @@ from keras import backend as K
 import tensorflow as tf
 sess = tf.Session()
 K.set_session(sess)
-K.set_image_data_format('channels_first')
+# K.set_image_data_format('channels_first')
+K.set_image_data_format('channels_last')
 
 from keras.metrics import categorical_accuracy as accuracy
 from keras.metrics import categorical_crossentropy as crossentropy
